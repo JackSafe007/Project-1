@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PNG Fullscreen Viewer (static, non-draggable)</title>
+  <style>
+    :root{
+      --bg: rgba(0,0,0,0.92);
+      --btn-bg: rgba(255,255,255,0.06);
+      --btn-fg: #fff;
+    }
+
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background:#f5f5f5;
+      color:#111;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:1rem;
+      padding:2rem;
+      box-sizing:border-box;
+    }
+
+    .uploader {
+      display:flex;
+      gap:.75rem;
+      align-items:center;
+      flex-direction:column;
+    }
+
+    input[type="file"]{
+      padding:.5rem;
+    }
+
+    button {
+      background:var(--btn-bg);
+      color:var(--btn-fg);
+      border:1px solid rgba(255,255,255,0.06);
+      padding:.5rem .75rem;
+      border-radius:6px;
+      cursor:pointer;
+    }
+
+    /* Fullscreen overlay */
+    #overlay {
+      display:none; /* shown when an image is loaded */
+      position:fixed;
+      inset:0;
+      background:var(--bg);
+      z-index:9999;
+      /* center content */
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:auto; /* allow scrolling if image is larger than viewport */
+      -webkit-overflow-scrolling:touch;
+    }
+
+    /* container to hold the image and controls */
+    .viewer {
+      position:relative;
+      margin:auto;
+      /* Don't limit size: image will render at its natural size. 
+         If it's larger than the viewport, overlay's scroll will allow viewing. */
+      display:block;
+    }
+
+    /* the image exactly at its intrinsic size by default */
+    #previewImage {
+      display:block;
+      width:auto;
+      height:auto;
+      max-width:none;
+      max-height:none;
+      -webkit-user-drag: none; /* Safari/Chrome */
+      user-drag: none;
+      user-select: none;
+      pointer-events: auto;
+      cursor:default;
+    }
+
+    /* Close button in the top-right of the overlay */
+    .close-btn {
+      position:fixed;
+      top:12px;
+      right:12px;
+      z-index:10000;
+      background:rgba(255,255,255,0.08);
+      border:0;
+      color:#fff;
+      padding:.5rem .6rem;
+      border-radius:6px;
+      font-size:16px;
+      line-height:1;
+      cursor:pointer;
+    }
+
+    .hint {
+      color: #ddd;
+      font-size: .9rem;
+      text-align:center;
+      margin-top:.5rem;
+    }
+
+    /* visually hide file name area for a simpler demo */
+    .file-label {
+      font-weight:600;
+    }
+  </style>
+</head>
+<body>
+  <div class="uploader" aria-live="polite">
+    <label class="file-label">Choose a PNG from your computer</label>
+    <!-- accept includes .png and .pnj (in case .pnj was intended) -->
+    <input id="fileInput" type="file" accept=".png,.pnj,image/png" />
+    <div class="hint">Selected image will open fullscreen at its own size. Dragging the picture is disabled.</div>
+  </div>
+
+  <!-- Fullscreen overlay -->
+  <div id="overlay" role="dialog" aria-modal="true" aria-hidden="true">
+    <button id="closeBtn" class="close-btn" aria-label="Close viewer">✕</button>
+    <div class="viewer" id="viewer">
+      <!-- Image element: src is set when a file is selected -->
+      <img id="previewImage" alt="Preview" draggable="false">
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const fileInput = document.getElementById('fileInput');
+      const overlay = document.getElementById('overlay');
+      const previewImage = document.getElementById('previewImage');
+      const closeBtn = document.getElementById('closeBtn');
+      let objectUrl = null;
+
+      function showOverlay() {
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+        // trap focus on close for a11y
+        closeBtn.focus();
+      }
+
+      function hideOverlay() {
+        overlay.style.display = 'none';
+        overlay.setAttribute('aria-hidden', 'true');
+        // cleanup url
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+          objectUrl = null;
+        }
+        previewImage.src = '';
+        fileInput.value = '';
+      }
+
+      // prevent dragging behavior (extra safety)
+      previewImage.ondragstart = () => false;
+
+      // Also prevent context menu if you want (optional) - comment out if you want save-as menu
+      // previewImage.addEventListener('contextmenu', e => e.preventDefault());
+
+      // load file and show image in overlay
+      fileInput.addEventListener('change', (ev) => {
+        const f = ev.target.files && ev.target.files[0];
+        if (!f) return;
+        // allow only PNG as requested
+        const validTypes = ['image/png'];
+        // Accept .pnj as filename but still check mime if available
+        if (f.type && !validTypes.includes(f.type)) {
+          // still allow if extension is .pnj or .png but mime unknown; optional validation
+          const lower = f.name.toLowerCase();
+          if (!(lower.endsWith('.png') || lower.endsWith('.pnj'))) {
+            alert('Please select a PNG file.');
+            fileInput.value = '';
+            return;
+          }
+        }
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+          objectUrl = null;
+        }
+        objectUrl = URL.createObjectURL(f);
+        previewImage.src = objectUrl;
+
+        // Ensure the image is shown at its intrinsic size when it loads.
+        previewImage.onload = () => {
+          // Do not resize the image — it remains at its natural size.
+          // If it overflows the viewport, the overlay's scroll will allow viewing.
+          showOverlay();
+        };
+        previewImage.onerror = () => {
+          alert('Could not load image. Make sure the file is a valid PNG.');
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            objectUrl = null;
+          }
+          previewImage.src = '';
+          fileInput.value = '';
+        };
+      });
+
+      // Close handlers
+      closeBtn.addEventListener('click', hideOverlay);
+      overlay.addEventListener('click', function(e){
+        // clicking background (not the image) closes the overlay
+        if (e.target === overlay) hideOverlay();
+      });
+      // ESC key closes
+      window.addEventListener('keydown', function(e){
+        if (e.key === 'Escape' && overlay.style.display === 'flex') {
+          hideOverlay();
+        }
+      });
+
+      // Prevent image from being moved with pointer drag (extra protection)
+      // For pointer events: stop pointerdown moving operations on the image.
+      previewImage.addEventListener('pointerdown', (e) => {
+        // prevent any gesture that would start dragging the image
+        e.preventDefault();
+      });
+
+      // Touch: prevent gesturestart that might allow dragging in some browsers
+      previewImage.addEventListener('touchstart', (e) => {
+        // do not call preventDefault here if you want page scrolling;
+        // but to make the image static you may leave this as-is.
+        // We'll not call preventDefault to allow scrolling overall.
+      }, {passive:true});
+    })();
+  </script>
+</body>
+</html>
