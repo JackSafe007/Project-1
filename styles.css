@@ -1,0 +1,165 @@
+:root{
+  --bg: #111;
+  --panel: rgba(0,0,0,0.85);
+  --accent: #1e90ff;
+  --control-height: 42px;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+  background: #fafafa;
+  color:#222;
+  min-height:100vh;
+}
+
+.app{
+  padding:24px;
+}
+
+.controls{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  margin-top:16px;
+}
+
+input[type="file"]{height:var(--control-height)}
+
+button{
+  height:var(--control-height);
+  padding:0 12px;
+  border:1px solid #ccc;
+  background:#fff;
+  cursor:pointer;
+  border-radius:6px;
+}
+button:disabled{opacity:0.5; cursor:not-allowed}
+
+.hint{color:#666; margin-top:12px}
+
+/* Fullscreen modal with static image */
+.modal{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background: rgba(0,0,0,0.85);
+  z-index:1000;
+  padding:20px;
+}
+.modal.hidden{display:none}
+
+.modal-content{
+  text-align:center;
+  color:#fff;
+  max-width:100%;
+  max-height:100%;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  align-items:center;
+}
+
+.modal-content img{
+  /* show image at its natural size but constrain to viewport */
+  max-width: 95vw;
+  max-height: 85vh;
+  width:auto;
+  height:auto;
+  user-select:none;
+  -webkit-user-drag: none;
+  pointer-events: none; /* static: no clicks/drag */
+  box-shadow:0 8px 30px rgba(0,0,0,0.7);
+}
+
+.modal-actions{
+  display:flex;
+  gap:8px;
+}
+
+/* Overlay with 16:9 view */
+.overlay{
+  position:fixed;
+  inset:0;
+  z-index:1100;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.overlay.hidden{display:none}
+
+.overlay-backdrop{
+  position:absolute;
+  inset:0;
+  background: rgba(0,0,0,0.6);
+}
+
+.overlay-panel{
+  position:relative;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  gap:16px;
+  padding:20px;
+  border-radius:10px;
+  background: linear-gradient(180deg, rgba(20,20,20,0.95), rgba(12,12,12,0.95));
+  box-shadow:0 12px 40px rgba(0,0,0,0.7);
+  max-width:95vw;
+  max-height:90vh;
+  align-self:center;
+}
+
+/* Arrow buttons */
+.arrow{
+  font-size:22px;
+  width:48px;
+  height:48px;
+  border-radius:8px;
+  background:var(--panel);
+  color:#fff;
+  border:1px solid rgba(255,255,255,0.06);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  user-select:none;
+}
+.arrow:active{transform:translateY(1px)}
+
+.viewbox{
+  /* 16:9 aspect ratio container */
+  background:#000;
+  aspect-ratio:16/9;
+  width:min(80vw, 1200px);
+  max-height:80vh;
+  overflow:hidden;
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:6px;
+  box-shadow:0 8px 30px rgba(0,0,0,0.6);
+}
+
+.viewbox img{
+  position:relative;
+  left:0;
+  top:0;
+  user-select:none;
+  -webkit-user-drag: none;
+  /* Ensure image sits naturally but can overflow horizontally for panning */
+  height: auto;
+  max-height: 100%;
+  width:auto;
+  transition: transform 0.18s ease-out;
+  will-change: transform;
+}
+
+/* overlay actions */
+.overlay-actions{
+  position:absolute;
+  bottom:14px;
+  right:14px;
+}
