@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Popup local image — small box, large image with pan & zoom</title>
+  <style>
+    :root{
+      --bg:#0b1220; --card:#071124; --accent:#06b6d4; --muted:#98a8b9;
+      --box-w:420px; --box-h:260px; /* popup box size (smaller than image) */
+      --thumb-w:260px; --thumb-h:140px;
+      --radius:10px;
+    }
+    html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:#e6eef6;display:flex;align-items:center;justify-content:center;padding:24px;}
+    .panel{display:flex;gap:20px;align-items:flex-start;max-width:980px;width:100%}
+    .forest-box{width:var(--thumb-w);height:var(--thumb-h);background:linear-gradient(180deg,#072734,#05202b);border-radius:var(--radius);overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer;border:2px dashed rgba(255,255,255,0.04);position:relative}
+    .forest-box img{width:100%;height:100%;object-fit:cover;display:block;user-select:none;-webkit-user-drag:none}
+    .label{position:absolute;left:10px;bottom:10px;padding:6px 8px;background:rgba(2,6,23,0.45);border-radius:8px;font-weight:700}
+    .controls{display:flex;flex-direction:column;gap:8px;min-width:240px}
+    .btn{background:var(--accent);color:#022;padding:10px;border-radius:10px;border:0;font-weight:700;cursor:pointer}
+    input[type=file]{display:none}
+    .hint{color:var(--muted);font-size:0.92rem}
+
+    /* Modal overlay with a fixed box smaller than image */
+    .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(2,6,23,0.7);z-index:1000;padding:20px}
+    .overlay.open{display:flex}
+    .modal{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));padding:12px;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.7);display:flex;flex-direction:column;gap:8px;align-items:center}
+    .toolbar{display:flex;gap:8px;align-items:center}
+    .view{
+      width:var(--box-w); height:var(--box-h); background:#000; border-radius:8px; overflow:hidden; position:relative;
+      border:2px solid rgba(255,255,255,0.03);
+      touch-action: none; /* allow dragging on touch */
+    }
+    /* The image is positioned absolutely so it can be larger than the box and panned */
+    .view img{
+      position:absolute; left:0; top:0; transform-origin:0 0; user-drag:none; user-select:none; -webkit-user-drag:none;
+      will-change: transform;
+    }
+    .caption{color:#cbd5e1;font-size:0.95rem}
+    .small{font-size:0.85rem;color:var(--muted)}
+    .close{background:transparent;border:0;color:#fff;padding:8px;border-radius:8px;cursor:pointer}
+    .zoom-range{width:160px}
+    .msg{color:var(--muted);font-size:0.9rem}
+    @media (max-width:640px){ :root{--box-w:320px;--box-h:200px} .panel{flex-direction:column;align-items:center} }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <div>
+      <div id="forestBox" class="forest-box" title="Click or drop an image">
+        <img id="thumb" src="https://images.unsplash.com/photo-1601758123927-9b4b0f2a9b8f?q=80&w=800&auto=format&fit=crop" alt="Forest thumbnail">
+        <div class="label">Forest</div>
+      </div>
+      <div class="hint" style="margin-top:10px">
+        Click the box or drag & drop an image file. The popup box is intentionally smaller than the actual image so you can pan and zoom.
+      </div>
+    </div>
+
+    <div class="controls">
+      <label class="btn" for="fileInput">Choose image from computer</label>
+      <input id="fileInput" type="file" accept="image/*" />
+      <div class="msg" id="status">Ready.</div>
+      <div class="small">After choosing an image it opens in a fixed-size popup. Use drag to pan and mouse wheel (or slider) to zoom.</div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal" role="document" aria-labelledby="caption">
+      <div class="toolbar" style="width:100%;justify-content:space-between">
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="closeBtn" class="close" aria-label="Close (Esc)">✕</button>
+          <div class="small" id="dimInfo">box: <span id="boxDim"></span></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="zoomRange" class="zoom-range" type="range" min="10" max="300" value="100" />
+          <div class="small" id="zoomPct">100%</div>
+        </div>
+      </div>
+
+      <div class="view" id="view">
+        <img id="modalImg" src="" alt="">
+      </div>
+
+      <div id="caption" class="caption">Forest</div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const fileInput = document.getElementById('fileInput');
+      const forestBox = document.getElementById('forestBox');
+      const thumb = document.getElementById('thumb');
+      const status = document.getElementById('status');
+
+      const overlay = document.getElementById('overlay');
+      const closeBtn = document.getElementById('closeBtn');
+      const view = document.getElementById('view');
+      const modalImg = document.getElementById('modalImg');
+      const caption = document.getElementById('caption');
+      const zoomRange = document.getElementById('zoomRange');
+      const zoomPct = document.getElementById('zoomPct');
+      const boxDim = document.getElementById('boxDim');
+
+      let objectUrl = null;
+
+      // Transform state for pan & zoom
+      let scale = 1;
+      let offsetX = 0;
+      let offsetY = 0;
+      let isPanning = false;
+      let lastX = 0, lastY = 0;
+
+      function setStatus(text, isErr = false){
+        status.textContent = text;
+        status.style.color = isErr ? '#fca5a5' : '#9ae6b4';
+      }
+
+      function isImage(file){ return file && file.type && file.type.startsWith('image/'); }
+
+      function openOverlay(src, filename = 'Forest'){
+        // reset transform
+        scale = 1;
+        offsetX = 0;
+        offsetY = 0;
+        zoomRange.value = 100;
+        zoomPct.textContent = '100%';
+
+        modalImg.src = src;
+        caption.textContent = filename;
+        overlay.classList.add('open');
+        overlay.setAttribute('aria-hidden','false');
+
+        // update box dims text
+        const w = view.clientWidth, h = view.clientHeight;
+        boxDim.textContent = `${w}×${h}px`;
+
+        // focus close for keyboard accessibility
+        closeBtn.focus();
+      }
+
+      function closeOverlay(){
+        overlay.classList.remove('open');
+        overlay.setAttribute('aria-hidden','true');
+        modalImg.src = '';
+        // revoke object URL if we created one (we keep thumbnail as its own objectURL)
+        // Do not revoke if we want thumbnail to keep showing; if objectUrl was used only for modal, revoke:
+        // We'll manage revoking when new file chosen.
+      }
+
+      // apply CSS transform according to scale and offsets
+      function updateTransform(){
+        modalImg.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+      }
+
+      // load image from file (file can be from input or drop)
+      function handleFile(file){
+        if (!file) return;
+        if (!isImage(file)){ setStatus('Not an image file.', true); return; }
+
+        // revoke previous object URL for modal, but keep thumbnail object if desired
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        objectUrl = URL.createObjectURL(file);
+
+        // set thumbnail to selected file
+        thumb.src = objectUrl;
+
+        // open modal showing the full image (which may be larger than the box)
+        openOverlay(objectUrl, file.name);
+        setStatus('Loaded: ' + file.name);
+      }
+
+      // file input
+      fileInput.addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        handleFile(f);
+      });
+
+      // clicking box opens input
+      forestBox.addEventListener('click', () => fileInput.click());
+
+      // drag & drop
+      ['dragenter','dragover'].forEach(ev => forestBox.addEventListener(ev, (e) => {
+        e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; forestBox.classList.add('dragover');
+      }));
+      ['dragleave','dragend','drop'].forEach(ev => forestBox.addEventListener(ev, (e) => {
+        e.preventDefault(); forestBox.classList.remove('dragover');
+      }));
+      forestBox.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        if (!dt || !dt.files || dt.files.length === 0) return;
+        handleFile(dt.files[0]);
+      });
+
+      // close handlers
+      closeBtn.addEventListener('click', closeOverlay);
+      overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) closeOverlay(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && overlay.classList.contains('open')) closeOverlay(); });
+
+      // Zoom range control
+      zoomRange.addEventListener('input', (e) => {
+        const pct = Number(e.target.value);
+        scale = pct / 100;
+        zoomPct.textContent = `${pct}%`;
+        updateTransform();
+      });
+
+      // mouse wheel to zoom centered on pointer
+      view.addEventListener('wheel', (e) => {
+        if (!modalImg.src) return;
+        e.preventDefault();
+        const rect = view.getBoundingClientRect();
+        const cx = e.clientX - rect.left; // pointer relative to view
+        const cy = e.clientY - rect.top;
+
+        const delta = e.deltaY < 0 ? 1.1 : 0.9; // zoom factor
+        const newScale = Math.max(0.1, Math.min(5, scale * delta));
+
+        // To zoom centered on pointer, adjust offsets:
+        // newOffset = (oldOffset - pointer) * (newScale/oldScale) + pointer
+        offsetX = (offsetX - cx) * (newScale/scale) + cx;
+        offsetY = (offsetY - cy) * (newScale/scale) + cy;
+        scale = newScale;
+
+        // sync range
+        zoomRange.value = Math.round(scale * 100);
+        zoomPct.textContent = `${Math.round(scale * 100)}%`;
+        updateTransform();
+      }, { passive:false });
+
+      // Pan: mouse
+      view.addEventListener('pointerdown', (e) => {
+        if (!modalImg.src) return;
+        isPanning = true;
+        view.setPointerCapture(e.pointerId);
+        lastX = e.clientX;
+        lastY = e.clientY;
+      });
+      view.addEventListener('pointermove', (e) => {
+        if (!isPanning) return;
+        const dx = e.clientX - lastX;
+        const dy = e.clientY - lastY;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        offsetX += dx;
+        offsetY += dy;
+        updateTransform();
+      });
+      view.addEventListener('pointerup', (e) => {
+        isPanning = false;
+        try { view.releasePointerCapture(e.pointerId); } catch(_) {}
+      });
+      view.addEventListener('pointercancel', () => { isPanning = false; });
+
+      // Touch double-tap to reset zoom/position
+      let lastTap = 0;
+      view.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        if (now - lastTap < 300) {
+          // reset
+          scale = 1; offsetX = 0; offsetY = 0;
+          zoomRange.value = 100; zoomPct.textContent = '100%';
+          updateTransform();
+        }
+        lastTap = now;
+      });
+
+      // When image loads, set its initial size to its natural size (do not fit)
+      modalImg.addEventListener('load', () => {
+        // Position image initially at top-left (0,0) with scale 1, unless it's smaller than view
+        // If image is smaller than view, center it.
+        const imgW = modalImg.naturalWidth;
+        const imgH = modalImg.naturalHeight;
+        const vw = view.clientWidth;
+        const vh = view.clientHeight;
+
+        // If the image is smaller than the view, center it and keep scale=1
+        if (imgW <= vw && imgH <= vh) {
+          scale = 1;
+          offsetX = Math.round((vw - imgW) / 2);
+          offsetY = Math.round((vh - imgH) / 2);
+          zoomRange.value = 100;
+          zoomPct.textContent = '100%';
+        } else {
+          // Start with 100% scale and top-left (so box is smaller than real image)
+          scale = 1;
+          offsetX = 0;
+          offsetY = 0;
+          zoomRange.value = 100;
+          zoomPct.textContent = '100%';
+        }
+        updateTransform();
+      });
+
+      // cleanup objectUrl when selecting another file or unloading
+      window.addEventListener('beforeunload', () => {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+      });
+
+      // initial
+      setStatus('Ready. Choose an image; the popup box is intentionally smaller than the image so you can pan/zoom.');
+    })();
+  </script>
+</body>
+</html>
