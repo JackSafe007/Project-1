@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Static Fullscreen Image + 16:9 Panner</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <h1>Image full-screen + 16:9 Panner demo</h1>
+
+    <div class="controls">
+      <input id="fileInput" type="file" accept=".png,.pnj,image/*" />
+      <button id="openModalBtn" disabled>Open Fullscreen Image</button>
+      <button id="openViewBtn" disabled>Open 16:9 View</button>
+    </div>
+
+    <p class="hint">Upload a PNG (or other image). "Open Fullscreen Image" shows the static full-screen modal. Use "Open 16:9 View" to open the framed view you can pan left/right.</p>
+  </main>
+
+  <!-- Fullscreen static modal -->
+  <div id="modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-content">
+      <img id="staticImg" src="" alt="Uploaded" draggable="false" />
+      <div class="modal-actions">
+        <button id="closeModalBtn">Close</button>
+        <button id="openViewFromModalBtn">Open 16:9 View</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 16:9 view overlay -->
+  <div id="viewOverlay" class="overlay hidden" aria-hidden="true">
+    <div class="overlay-backdrop" id="closeViewBackdrop"></div>
+
+    <div class="overlay-panel" role="dialog" aria-label="16:9 view">
+      <button class="arrow left" id="arrowLeft" aria-label="Move left">◀</button>
+
+      <div class="viewbox" id="viewbox">
+        <img id="pannableImg" src="" alt="Pannable" draggable="false" />
+      </div>
+
+      <button class="arrow right" id="arrowRight" aria-label="Move right">▶</button>
+
+      <div class="overlay-actions">
+        <button id="closeViewBtn">Close View</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
